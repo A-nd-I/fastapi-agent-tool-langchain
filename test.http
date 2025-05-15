@@ -1,0 +1,50 @@
+### test
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "What times are available on Monday?"
+  }
+}
+
+### test
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "Necesito un abogado para un caso de corrupción"
+  }
+}
+
+
+
+
+### Test CompareArticles
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "Compara estos artículos. Articulo1: 'La constitución establece los derechos fundamentales'. Articulo2: 'La constitucion establece los derechos fundamentales'"
+  }
+}
+
+
+
+
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "Compara estos artículos. Articulo1: 'Con la firma del contrato seras libre de adquirir las acciones'. Articulo2: 'Con la firma del contrato seras libre de adquirir las acciones si son venidas'"
+  }
+}
+
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "Compara estos artículos. Articulo1: 'Toda persona tiene derecho a acceder a una educación, aunque su calidad y gratuidad dependerán de los recursos disponibles'. Articulo2: 'Toda persona tiene derecho a recibir una educación pública, gratuita y de calidad.'"
+  }
+}
+
+POST http://localhost:8000/general-agent/invoke
+{
+  "input": {
+    "input": "Compara estos artículos. Articulo1: 'El Estado fomentará la formación académica, priorizando aquellos niveles que impulsen el desarrollo productivo del país'. Articulo2: 'El Estado garantizará el acceso equitativo a la formación académica en todos los niveles.'"
+  }
+}
