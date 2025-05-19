@@ -1,4 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile, Form
+from langchain.document_loaders import PyPDFLoader
+from langchain_openai import OpenAIEmbeddings
+import numpy as np
+from io import BytesIO
+import tempfile
+import base64
+
 from langserve import add_routes
 from langchain_community.chat_models import ChatOpenAI  # <-- actualizado
 from langchain.agents import initialize_agent, AgentType, Tool
@@ -6,10 +13,19 @@ from langchain_core.tools import tool
 import uvicorn
 import os
 from dotenv import load_dotenv
+from typing import Annotated
+from langchain.agents import ZeroShotAgent
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import LLMChain
+from langchain.agents import AgentExecutor
 
 # Load environment variables (like your OpenAI API key)
 load_dotenv()
 os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY")
+
+# Verificar la API key al inicio
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY no está configurada en las variables de entorno")
 
 # Define the FastAPI app
 app = FastAPI(
@@ -128,39 +144,148 @@ def compare_articles(articles: str) -> str:
     
     return "Los artículos tienen diferencias en espacios o puntuación que no son visibles"
 
-# Initialize the language model (updated import)
-llm = ChatOpenAI(model="gpt-4o")
 
-# Wrap the tool inside a LangChain agent
+@tool
+def compare_pdfs(input: str, pdf1_base64: str = None, pdf2_base64: str = None) -> str:
+    """Compara dos PDFs y determina su similitud."""
+    if not pdf1_base64 or not pdf2_base64:
+        return "Para comparar los PDFs, necesito que proporciones ambos documentos en formato base64."
+    
+    try:
+        def pdf_to_text(pdf_base64: str, max_chars: int = 8000) -> str:
+            """Convert base64 PDF to text with length limit."""
+            pdf_bytes = base64.b64decode(pdf_base64)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+                temp_pdf.write(pdf_bytes)
+                temp_pdf.flush()
+                
+                loader = PyPDFLoader(temp_pdf.name)
+                pages = loader.load()
+                
+                # Concatenar el texto de todas las páginas y limitar la longitud
+                full_text = ' '.join(page.page_content for page in pages)
+                if len(full_text) > max_chars:
+                    return full_text[:max_chars] + "... (texto truncado)"
+                return full_text
+
+        # Convertir PDFs a texto con límite de caracteres
+        text1 = pdf_to_text(pdf1_base64)
+        text2 = pdf_to_text(pdf2_base64)
+        
+        # Obtener embeddings de manera más eficiente
+        embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small",  # Modelo más ligero
+            chunk_size=1000  # Procesar en chunks más pequeños
+        )
+        
+        # Calcular similitud
+        embedding1 = embeddings.embed_query(text1)
+        embedding2 = embeddings.embed_query(text2)
+        
+        similarity = np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
+        
+        # Retornar resultado resumido
+        if similarity > 0.95:
+            return f"Los documentos son prácticamente idénticos (Similitud: {similarity:.2%})"
+        elif similarity > 0.8:
+            return f"Los documentos son muy similares (Similitud: {similarity:.2%})"
+        elif similarity > 0.6:
+            return f"Los documentos tienen algunas similitudes (Similitud: {similarity:.2%})"
+        else:
+            return f"Los documentos son diferentes (Similitud: {similarity:.2%})"
+            
+    except Exception as e:
+        return f"Error al procesar los PDFs: {str(e)}"
+
+
+# 2. Configurar el LLM correctamente
+llm = ChatOpenAI(
+    model="gpt-4.1",  # Modelo con mayor capacidad de contexto
+    temperature=0,
+    max_tokens=1000  # Limitar la longitud de las respuestas
+)
+
+
+# 3. Definir las herramientas con un formato más simple
 tools = [
     Tool(
         name="CheckCalendarAvailability",
         func=check_calendar_availability,
-        description="Check calendar availability for a given day"
+        description="Verifica la disponibilidad del calendario para un día específico"
     ),
     Tool(
         name="ClassifyLegalTopic",
         func=classify_legal_topic,
-        description="Classify a legal topic and determine which type of lawyer is needed"
+        description="Clasifica un tema legal y determina qué tipo de abogado se necesita"
     ),
     Tool(
         name="CompareArticles",
         func=compare_articles,
-        description="Compare two articles and determine if they are identical or have differences"
+        description="Compara dos artículos y determina si son idénticos o tienen diferencias"
+    ),
+    Tool(
+        name="ComparePDFs",
+        func=compare_pdfs,
+        description="Compara dos PDFs y determina su similitud. Requiere pdf1_base64 y pdf2_base64."
     )
 ]
 
-general_agent = initialize_agent(
+# 4. Configurar el prompt del agente
+prefix = """Eres un asistente legal que ayuda a comparar documentos y clasificar temas legales.
+Tienes acceso a las siguientes herramientas:"""
+
+suffix = """Comienza!
+
+Question: {input}
+{agent_scratchpad}"""
+
+prompt = ZeroShotAgent.create_prompt(
     tools,
-    llm,
-    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    prefix=prefix,
+    suffix=suffix,
+    input_variables=["input", "agent_scratchpad"]
+)
+
+# 5. Inicializar el agente con la nueva configuración
+memory = ConversationBufferMemory(memory_key="chat_history")
+
+agent = ZeroShotAgent(
+    llm_chain=LLMChain(llm=llm, prompt=prompt),
+    tools=tools,
     verbose=True
 )
+
+agent_chain = AgentExecutor.from_agent_and_tools(
+    agent=agent,
+    tools=tools,
+    verbose=True,
+    memory=memory,
+    handle_parsing_errors=True,
+    max_iterations=3,
+    early_stopping_method="generate",
+    max_execution_time=30  # Limitar el tiempo de ejecución
+)
+
+# 6. Configurar la ruta con el nuevo agente
+@app.post("/general-agent/invoke")
+async def invoke_agent(request: dict):
+    try:
+        response = await agent_chain.ainvoke(
+            {"input": request.get("input", "")},
+        )
+        return response
+    except Exception as e:
+        return {
+            "error": True,
+            "message": str(e),
+            "type": "agent_error"
+        }
 
 # Expose the agent as an API route using LangServe
 add_routes(
     app,
-    general_agent,
+    agent_chain,
     path="/general-agent"
 )
 

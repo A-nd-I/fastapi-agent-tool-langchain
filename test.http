@@ -10,10 +10,9 @@ POST http://localhost:8000/general-agent/invoke
 POST http://localhost:8000/general-agent/invoke
 {
   "input": {
-    "input": "Necesito un abogado para un caso de corrupción"
+    "input": "Necesito un abogado para un caso de corrupción en propiedad horizontal"
   }
 }
-
 
 
 
