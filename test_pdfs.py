@@ -12,7 +12,7 @@ def test_endpoints():
 
     # 2. Probar el endpoint /compare-pdfs (POST)
     # Primero, necesitamos preparar los archivos PDF
-    with open("./2.pdf", "rb") as pdf1_file:
+    with open("./1.pdf", "rb") as pdf1_file:
         pdf1_content = pdf1_file.read()
     
     with open("./3.pdf", "rb") as pdf2_file:
