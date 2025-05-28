@@ -326,6 +326,10 @@ agent_chain = AgentExecutor.from_agent_and_tools(
     max_execution_time=30
 )
 
+#if __name__ == "__main__":
+#    import uvicorn
+#    uvicorn.run(app, host="localhost", port=8000)
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)

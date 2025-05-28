@@ -1,80 +1,138 @@
 import streamlit as st
 import requests
 
+# Añadir esta línea al inicio del archivo, antes de cualquier otro comando de st
+st.set_page_config(layout="wide")
+
+# Añadir estos estilos CSS al inicio del archivo, después de set_page_config
+st.markdown("""
+    <style>
+        .scrollable-container {
+            height: 85vh;
+            overflow-y: auto;
+            padding-right: 20px;
+            border-left: 1px solid #ddd;
+            margin-top: 1rem;
+        }
+        .stButton button {
+            width: 100%;
+        }
+        .stSpinner {
+            position: relative;
+            top: 0;
+            left: 0;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 def main():
-    st.title("PDF Comparison Tool")
+    st.title("Agente Comparador de Contratos - Lawgent")
 
-    pdf1 = st.file_uploader("Upload first PDF", type=['pdf'])
-    pdf2 = st.file_uploader("Upload second PDF", type=['pdf'])
+    # Crear dos columnas principales
+    left_col, right_col = st.columns(2)
 
-    # Elige diff como opción por defecto (index=2)
-    comparison_method = st.radio(
-        "Select comparison method:",
-        (
-            "Embeddings global + por secciones",
-            "FAISS CPU vector search",
-            "Diff palabra a palabra (precisión máxima)"
-        ),
-        index=2  # ← ¡Esta línea hace que Diff sea la opción por defecto!
-    )
+    # Columna izquierda: formulario y controles
+    with left_col:
+        pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
+        pdf2 = st.file_uploader("Upload Contract 2", type=['pdf'])
 
-    base_url = "http://localhost:8000"
-    endpoints = {
-        "Embeddings global + por secciones": "/compare-pdfs",
-        "FAISS CPU vector search": "/compare-pdfs-faiss",
-        "Diff palabra a palabra (precisión máxima)": "/compare-pdfs-diff"
-    }
+         # comparison_method = st.radio(
+         #    "Select comparison method:",
+         #    (
+         #        "Embeddings global + por secciones",
+         #        "FAISS CPU vector search",
+         #        "Diff palabra a palabra (precisión máxima)"
+         #    ),
+         #    index=2
+         # )
+        # Simplificamos a solo una opción de comparación
+        comparison_method = "Diff palabra a palabra (precisión máxima)"
 
-    # Checkbox solo si diff está seleccionado
-    explain_with_llm = True
-    if comparison_method == "Diff palabra a palabra (precisión máxima)":
         explain_with_llm = st.checkbox(
             "Mostrar diferencias técnicas (diff)", value=False,
             help="Por defecto verás una explicación en lenguaje sencillo. Marca para ver el diff técnico."
         )
 
-    if st.button("Compare PDFs") and pdf1 is not None and pdf2 is not None:
-        files = {
-            'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
-            'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
-        }
-        endpoint = endpoints[comparison_method]
-        params = {}
-        if comparison_method == "Diff palabra a palabra (precisión máxima)":
-            # Invertido porque explain_with_llm es "¿quieres ver el diff técnico?"
-            params['explain_with_llm'] = str(not explain_with_llm).lower()
+        compare_clicked = st.button("Comparar PDFs")
 
-        try:
-            with st.spinner('Comparing PDFs...'):
-                compare_response = requests.post(f"{base_url}{endpoint}", files=files, params=params)
-                compare_response.raise_for_status()
-                response_json = compare_response.json()
+    
+
+    base_url = "http://localhost:8000"
+    endpoints = {
+        "Diff palabra a palabra (precisión máxima)": "/compare-pdfs-diff"
+    }
+
+    # Columna derecha: resultados
+    with right_col:
+        if compare_clicked and pdf1 is not None and pdf2 is not None:
+            st.warning("""
+                ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%. 
+                El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada. 
+                Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
+            """)
+            
+            files = {
+                'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
+                'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
+            }
+            endpoint = endpoints[comparison_method]
+            params = {}
+            if comparison_method == "Diff palabra a palabra (precisión máxima)":
+                params['explain_with_llm'] = str(not explain_with_llm).lower()
+
+            try:
+                with st.spinner('Comparing PDFs...'):
+                    compare_response = requests.post(f"{base_url}{endpoint}", files=files, params=params)
+                    compare_response.raise_for_status()
+                    result_data = compare_response.json()
+
                 st.success("Comparison completed!")
 
                 if comparison_method == "Diff palabra a palabra (precisión máxima)":
                     if explain_with_llm:
-                        # Mostrar técnico
                         st.subheader("Diferencias línea por línea:")
-                        diff_output = "\n".join(response_json.get("diff_lines", []))
+                        diff_output = "\n".join(result_data.get("diff_lines", []))
                         st.code(diff_output, language="diff")
-                        st.json(response_json.get("changes", []))
-                        st.info(response_json["summary"]["interpretation"])
+                        st.json(result_data.get("changes", []))
+                        st.info(result_data["summary"]["interpretation"])
                     else:
-                        # Mostrar explicación amigable
                         st.subheader("Explicación de las diferencias:")
-                        st.write(response_json.get("explanation", "Sin explicación"))
-                        st.info(response_json["summary"]["interpretation"])
+                        st.write(result_data.get("explanation", "Sin explicación"))
+                        st.info(result_data["summary"]["interpretation"])
                 else:
-                    st.json(response_json)
-        except Exception as e:
-            st.error(f"Error during comparison: {str(e)}")
+                    st.json(result_data)
+            except Exception as e:
+                st.error(f"Error during comparison: {str(e)}")
+        else:
+            st.markdown("""
+                ### 👋 Bienvenido al Agente Comparador de Contratos - Lawgent
+                
+                #### Instrucciones:
+                1. Sube dos contratos en formato PDF en la columna izquierda
+                2. Decide si quieres ver las diferencias técnicas marcando la casilla correspondiente
+                3. Haz clic en "Comparar PDFs" para ver los resultados
+                
+                #### Características:
+                - Comparación detallada palabra por palabra
+                - Resumen en lenguaje natural de las diferencias
+                - Visualización técnica de cambios (opcional)
+                
+                *Los resultados aparecerán en este espacio una vez que se realice la comparación.*
 
-    if st.button("Get Legal Phrase"):
-        try:
-            frase_response = requests.get(f"{base_url}/frase-legal")
-            st.info(frase_response.json().get("frase", "No phrase received."))
-        except Exception as e:
-            st.error(f"Error getting legal phrase: {str(e)}")
+                ---
+                
+                ⚠️ **AVISO DE RESPONSABILIDAD**:
+                > Este sistema opera con una precisión predictiva que puede ser inferior o igual al 99%. El usuario es totalmente 
+                > responsable de verificar la veracidad y exactitud de toda la información proporcionada. Los resultados 
+                > deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
+            """)
+            
+            # Añadir una imagen o icono placeholder (opcional)
+            st.markdown("""
+                <div style="text-align: center; padding: 2rem;">
+                    <i class="fas fa-file-contract" style="font-size: 5rem; color: #f0f2f6;"></i>
+                </div>
+            """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
