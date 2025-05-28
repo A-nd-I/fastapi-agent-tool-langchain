@@ -1,10 +1,11 @@
 from fastapi import FastAPI, UploadFile, Query
 
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
+
 from langchain_openai import OpenAIEmbeddings
 import numpy as np
 import tempfile
-import base64
+
 import random
 import os
 from dotenv import load_dotenv
@@ -12,7 +13,6 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain.agents import Tool, ZeroShotAgent, AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMChain
-from langchain.vectorstores import FAISS
 import difflib
 
 # Load environment variables
@@ -155,71 +155,6 @@ async def compare_pdfs_endpoint(pdf1: UploadFile, pdf2: UploadFile):
     except Exception as e:
         return {"error": True, "message": str(e), "type": "processing_error"}
 
-@app.post("/compare-pdfs-faiss")
-async def compare_pdfs_faiss(pdf1: UploadFile, pdf2: UploadFile):
-    """Comparación por búsqueda semántica con FAISS + LLM"""
-    try:
-        pdf1_bytes = await pdf1.read()
-        pdf2_bytes = await pdf2.read()
-        text1 = pdf_to_text(pdf1_bytes)
-        text2 = pdf_to_text(pdf2_bytes)
-        sections1 = split_text_into_sections(text1, section_length=500)
-        sections2 = split_text_into_sections(text2, section_length=500)
-        vectorstore = FAISS.from_texts(sections1, OpenAIEmbeddings(model="text-embedding-3-small", chunk_size=1000))
-        matches = []
-        for i, section in enumerate(sections2):
-            result = vectorstore.similarity_search_with_score(section, k=1)
-            if result:
-                matched_doc, score = result[0]
-                similarity_score = 1 - score
-                detailed_analysis = analyze_difference_with_llm(llm, matched_doc.page_content, section)
-                matches.append({
-                    "section_number": i + 1,
-                    "text_original": matched_doc.page_content,
-                    "text_modified": section,
-                    "similarity_score": similarity_score,
-                    "similarity_percent": f"{similarity_score * 100:.2f}%",
-                    "detailed_analysis": detailed_analysis
-                })
-        matches.sort(key=lambda x: x["similarity_score"], reverse=True)
-        similar_sections = [m for m in matches if m["similarity_score"] >= 0.90]
-        different_sections = [m for m in matches if m["similarity_score"] < 0.90]
-
-        return {
-            "match_count": len(matches),
-            "sections_analyzed": {
-                "total": len(sections2),
-                "similar": len(similar_sections),
-                "different": len(different_sections)
-            },
-            "similar_sections": [
-                {
-                    "section_number": m["section_number"],
-                    "text_original": m["text_original"],
-                    "text_modified": m["text_modified"],
-                    "similarity": m["similarity_percent"]
-                }
-                for m in similar_sections
-            ],
-            "differences_found": [
-                {
-                    "section_number": m["section_number"],
-                    "text_original": m["text_original"],
-                    "text_modified": m["text_modified"],
-                    "similarity": m["similarity_percent"],
-                    "analysis": m["detailed_analysis"]
-                }
-                for m in different_sections
-            ],
-            "summary": {
-                "total_differences": len(different_sections),
-                "total_similarities": len(similar_sections),
-                "average_similarity": f"{sum(m['similarity_score'] for m in matches) / len(matches) * 100:.2f}%"
-            }
-        }
-
-    except Exception as e:
-        return {"error": True, "message": str(e), "type": "faiss_comparison_error"}
 
 @app.post("/compare-pdfs-diff")
 async def compare_pdfs_diff(
@@ -332,4 +267,4 @@ agent_chain = AgentExecutor.from_agent_and_tools(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000)

@@ -66,7 +66,7 @@ def main():
     with right_col:
         if compare_clicked and pdf1 is not None and pdf2 is not None:
             st.warning("""
-                ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%. 
+                ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva igual o menor al 99%. 
                 El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada. 
                 Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
             """)
