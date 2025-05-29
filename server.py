@@ -215,8 +215,13 @@ Lista de diferencias detectadas:
 
 Por favor, explica los cambios más relevantes en lenguaje simple, indicando cómo afectan el significado legal. Hazlo punto por punto.
 """
-            explanation = llm.invoke(prompt).content
-
+            try:
+                explanation = llm.invoke(prompt).content
+                if not explanation:
+                    explanation = "⚠️ El modelo no devolvió contenido."
+            except Exception as e:
+                print(f"Error al invocar LLM: {str(e)}")
+                explanation = "⚠️ No se pudo generar una explicación por un error del modelo."
             return {
                 "explanation": explanation,
                 "summary": summary
