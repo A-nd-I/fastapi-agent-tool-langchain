@@ -204,17 +204,18 @@ async def compare_pdfs_diff(
             # Genera una explicación amigable con LLM
             prompt = f"""Eres un abogado experto y tu tarea es analizar y explicar las diferencias entre dos documentos legales. No seas técnico, explica de manera comprensible para un cliente, de forma clara y estructurada.
 
-Documento A:
-\"\"\"{text1[:6000]}\"\"\"  # Puedes truncar para evitar mensajes muy largos
+            Documento A:
+            \"\"\"{text1[:6000]}\"\"\"  # Puedes truncar para evitar mensajes muy largos
 
-Documento B:
-\"\"\"{text2[:6000]}\"\"\"
+            Documento B:
+            \"\"\"{text2[:6000]}\"\"\"
 
-Lista de diferencias detectadas:
-{[c for c in changes]}
+            Lista de diferencias detectadas:
+            {[c for c in changes]}
 
-Por favor, explica los cambios más relevantes en lenguaje simple, indicando cómo afectan el significado legal. Hazlo punto por punto.
-"""
+            Por favor, explica los cambios más relevantes en lenguaje simple, indicando cómo afectan el significado legal. Hazlo punto por punto.
+            """
+            print(prompt)
             try:
                 explanation = llm.invoke(prompt).content
                 if not explanation:
