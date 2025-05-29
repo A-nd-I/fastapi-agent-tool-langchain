@@ -160,24 +160,32 @@ async def compare_pdfs_endpoint(pdf1: UploadFile, pdf2: UploadFile):
 async def compare_pdfs_diff(
     pdf1: UploadFile, 
     pdf2: UploadFile, 
-    explain_with_llm: bool = Query(True, description="¿Explicar diferencias con LLM o mostrar diff técnico?")
+    explain_with_llm: bool = True
 ):
     """
     Comparación palabra a palabra y por línea usando difflib para encontrar diferencias exactas.
     """
     try:
+        print("Starting PDF comparison...")
         pdf1_bytes = await pdf1.read()
         pdf2_bytes = await pdf2.read()
+        print(f"PDF files read. PDF1 size: {len(pdf1_bytes)} bytes, PDF2 size: {len(pdf2_bytes)} bytes")
+        
         text1 = pdf_to_text(pdf1_bytes, max_chars=30000)
         text2 = pdf_to_text(pdf2_bytes, max_chars=30000)
+        print(f"Converted PDFs to text. Text1 length: {len(text1)}, Text2 length: {len(text2)}")
 
         lines1 = text1.split('\n')
         lines2 = text2.split('\n')
+        print(f"Split texts into lines. Lines in doc1: {len(lines1)}, Lines in doc2: {len(lines2)}")
+        
         diff = list(difflib.unified_diff(lines1, lines2, fromfile='Documento A', tofile='Documento B', lineterm=''))
+        print(f"Generated diff with {len(diff)} differences")
 
         sm = difflib.SequenceMatcher(None, text1, text2)
         similarity = sm.ratio()
         similarity_percentage = similarity * 100
+        print(f"Calculated similarity: {similarity_percentage:.2f}%")
 
         changes = []
         for tag, i1, i2, j1, j2 in sm.get_opcodes():
@@ -189,6 +197,7 @@ async def compare_pdfs_diff(
                     "original_index": i1,
                     "modified_index": j1
                 })
+        print(f"Found {len(changes)} changes between documents")
 
         summary = {
             "total_changes": len(changes),
@@ -199,8 +208,10 @@ async def compare_pdfs_diff(
                 )
             )
         }
+        print(f"Generated summary: {summary}")
 
         if explain_with_llm:
+            print("Generating LLM explanation...")
             # Genera una explicación amigable con LLM
             prompt = f"""Eres un abogado experto y tu tarea es analizar y explicar las diferencias entre dos documentos legales. No seas técnico, explica de manera comprensible para un cliente, de forma clara y estructurada.
 
@@ -215,11 +226,13 @@ async def compare_pdfs_diff(
 
             Por favor, explica los cambios más relevantes en lenguaje simple, indicando cómo afectan el significado legal. Hazlo punto por punto.
             """
-            print(prompt)
+            print("Generated prompt for LLM, length:", len(prompt))
             try:
                 explanation = llm.invoke(prompt).content
+                print("LLM explanation received, length:", len(explanation))
                 if not explanation:
                     explanation = "⚠️ El modelo no devolvió contenido."
+                    print("Warning: LLM returned empty content")
             except Exception as e:
                 print(f"Error al invocar LLM: {str(e)}")
                 explanation = "⚠️ No se pudo generar una explicación por un error del modelo."
@@ -228,6 +241,7 @@ async def compare_pdfs_diff(
                 "summary": summary
             }
         else:
+            print("Returning technical diff results...")
             # Retorna el diff técnico como antes
             return {
                 "diff_lines": diff,
@@ -236,6 +250,7 @@ async def compare_pdfs_diff(
                 "summary": summary
             }
     except Exception as e:
+        print(f"Error during comparison: {str(e)}")
         return {"error": True, "message": str(e), "type": "diff_comparison_error"}
     
 @app.get("/frase-legal")
