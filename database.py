@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -7,6 +7,10 @@ import os
 
 # Crear el directorio para la base de datos si no existe
 os.makedirs('data', exist_ok=True)
+
+# Si existe la base de datos, eliminarla
+if os.path.exists('data/users.db'):
+    os.remove('data/users.db')
 
 # Configuración de la base de datos
 SQLALCHEMY_DATABASE_URL = "sqlite:///data/users.db"
@@ -25,6 +29,14 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     role = Column(String, default="user")
+    
+    # Campos para Stripe
+    stripe_customer_id = Column(String, unique=True, nullable=True)
+    subscription_status = Column(String, nullable=True)  # 'active', 'canceled', 'past_due', etc.
+    subscription_plan = Column(String, nullable=True)    # 'basic', 'pro', etc.
+    subscription_end_date = Column(DateTime, nullable=True)
+    comparisons_count = Column(Integer, default=0)      # Contador de comparaciones realizadas
+    last_comparison_date = Column(DateTime, nullable=True)
 
 # Crear las tablas
 Base.metadata.create_all(bind=engine)

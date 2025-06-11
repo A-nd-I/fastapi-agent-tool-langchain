@@ -2,6 +2,13 @@ import streamlit as st
 import requests
 from database import SessionLocal, create_user, get_user_by_username, verify_password, get_user_by_email
 from session_manager import SessionManager
+from stripe_manager import (
+    SUBSCRIPTION_PLANS, 
+    create_checkout_session, 
+    get_subscription_status,
+    update_comparison_count,
+    can_make_comparison
+)
 import os
 
 # Inicializar el gestor de sesiones
@@ -161,12 +168,19 @@ def login_page():
                     st.session_state.show_login = False
                     st.rerun()
             
-            st.markdown("""
-            ---
-            **Credenciales de prueba:**
-            - Usuario: admin
-            - Contraseña: admin
-            """)
+            st.markdown(
+                """
+                <hr>
+                <div style="background-color: #f0f2f6; border-radius: 10px; padding: 18px 24px; margin-top: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <h4 style="margin-bottom: 8px; color: #2c3e50;">🔖 <span style="color:#1a73e8;">Lawgent</span> <span style="font-size: 0.85em; color: #888;">v0.1.0</span></h4>
+                    <p style="margin-bottom: 6px;"><b>Descripción:</b> Agente Comparador de Contratos</p>
+                    <p style="margin-bottom: 6px;"><b>Autor:</b> Carlos Andres Mogollón</p>
+                    <p style="margin-bottom: 6px;"><b>Email:</b> <a href="mailto:mogollonrojascarlosandres@gmail.com">mogollonrojascarlosandres@gmail.com</a></p>
+                    <p style="margin-bottom: 0;"><b>Teléfono:</b> <a href="tel:+573209221591">+57 320 922 15 91</a></p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         else:
             show_register_form()
             if st.button("¿Ya tienes cuenta? Inicia Sesión"):
@@ -177,14 +191,158 @@ def login_page():
     
     return True
 
-def main_content():
-    st.title("Agente Comparador de Contratos - Lawgent")
+def show_profile():
+    """Muestra la página de perfil del usuario"""
+    st.title("👤 Perfil de Usuario")
+    
+    try:
+        db = SessionLocal()
+        user = get_user_by_username(db, st.session_state.username)
+        
+        if user:
+            # Crear dos columnas
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Información Personal")
+                st.write(f"**Usuario:** {user.username}")
+                st.write(f"**Email:** {user.email}")
+                st.write(f"**Rol:** {user.role}")
+                st.write(f"**Cuenta creada:** {user.created_at.strftime('%d/%m/%Y')}")
+                st.write(f"**Estado:** {'Activo' if user.is_active else 'Inactivo'}")
+            
+            with col2:
+                st.markdown("### Estadísticas")
+                st.info("📊 Próximamente se agregarán estadísticas de uso")
+                
+    except Exception as e:
+        st.error(f"Error al cargar el perfil: {str(e)}")
+    finally:
+        db.close()
 
-    # Agregar título y botón de logout en la barra lateral
+def show_subscription_page():
+    """Muestra la página de suscripción"""
+    st.title("💳 Planes de Suscripción")
+    
+    # Obtener estado actual de suscripción
+    try:
+        db = SessionLocal()
+        user = get_user_by_username(db, st.session_state.username)
+        subscription = get_subscription_status(user.id, db) if user else None
+        
+        if subscription:
+            if subscription.get('is_free_plan'):
+                st.info(f"🎉 Estás usando el plan gratuito - Te quedan {subscription['remaining_comparisons']} comparaciones")
+                if subscription['remaining_comparisons'] <= 0:
+                    st.warning("⚠️ Has alcanzado el límite de comparaciones gratuitas")
+            else:
+                st.success(f"✅ Tienes una suscripción activa al {subscription['plan']}")
+                st.write(f"Tu suscripción se renovará el {subscription['current_period_end'].strftime('%d/%m/%Y')}")
+            
+            if not subscription.get('is_free_plan') and st.button("❌ Cancelar Suscripción"):
+                st.warning("Función de cancelación en desarrollo")
+                
+        # Mostrar planes disponibles
+        st.write("### Planes Disponibles")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(
+                f"""
+                <div style="padding: 20px; border: 1px solid #ddd; border-radius: 10px; height: 100%;">
+                    <h3>{SUBSCRIPTION_PLANS['free']['name']}</h3>
+                    <h2>Gratis</h2>
+                    <hr>
+                    <ul>
+                        {''.join([f'<li>{feature}</li>' for feature in SUBSCRIPTION_PLANS['free']['features']])}
+                    </ul>
+                    </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button("🎁 Usar Plan Gratuito"):
+                try:
+                    user.subscription_plan = "free"
+                    db.commit()
+                    st.success("✅ Plan gratuito activado!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al activar plan gratuito: {str(e)}")
+        
+        with col2:
+            st.markdown(
+                f"""
+                <div style="padding: 20px; border: 1px solid #ddd; border-radius: 10px; height: 100%;">
+                    <h3>{SUBSCRIPTION_PLANS['basic']['name']}</h3>
+                    <h2>${SUBSCRIPTION_PLANS['basic']['price']}/mes</h2>
+                    <hr>
+                    <ul>
+                        {''.join([f'<li>{feature}</li>' for feature in SUBSCRIPTION_PLANS['basic']['features']])}
+                    </ul>
+                    </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button("🔓 Suscribirse al Plan Básico"):
+                checkout_session = create_checkout_session(
+                    'basic',
+                    user.id,
+                    success_url=f"{base_url}/success",
+                    cancel_url=f"{base_url}/cancel"
+                )
+                if checkout_session:
+                    st.markdown(f"<meta http-equiv='refresh' content='0;url={checkout_session.url}'>", unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(
+                f"""
+                <div style="padding: 20px; border: 1px solid #1a73e8; border-radius: 10px; height: 100%; background-color: #f8f9fa;">
+                    <h3>{SUBSCRIPTION_PLANS['pro']['name']}</h3>
+                    <h2>${SUBSCRIPTION_PLANS['pro']['price']}/mes</h2>
+                    <hr>
+                    <ul>
+                        {''.join([f'<li>{feature}</li>' for feature in SUBSCRIPTION_PLANS['pro']['features']])}
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button("🚀 Suscribirse al Plan Pro"):
+                checkout_session = create_checkout_session(
+                    'pro',
+                    user.id,
+                    success_url=f"{base_url}/success",
+                    cancel_url=f"{base_url}/cancel"
+                )
+                if checkout_session:
+                    st.markdown(f"<meta http-equiv='refresh' content='0;url={checkout_session.url}'>", unsafe_allow_html=True)
+                    
+    except Exception as e:
+        st.error(f"Error al cargar los planes de suscripción: {str(e)}")
+    finally:
+        db.close()
+
+def main_content():
+    # Variable para controlar la vista actual
+    st.session_state.setdefault('current_view', 'main')
+
+    # Agregar título y botones en la barra lateral
     with st.sidebar:
         st.markdown('<div class="sidebar-title">🤖 LawGent</div>', unsafe_allow_html=True)
+        
         if st.sidebar.button("Inicio"):
+            st.session_state.current_view = 'main'
             st.rerun()
+            
+        if st.sidebar.button("👤 Mi Perfil"):
+            st.session_state.current_view = 'profile'
+            st.rerun()
+            
+        if st.sidebar.button("💳 Suscripción"):
+            st.session_state.current_view = 'subscription'
+            st.rerun()
+            
         if st.button("Cerrar Sesión"):
             if 'session_token' in st.session_state:
                 session_manager.delete_session(st.session_state.session_token)
@@ -196,79 +354,107 @@ def main_content():
             st.session_state.logged_in = False
             st.rerun()
 
-    left_col, right_col = st.columns(2)
+    # Mostrar la vista correspondiente
+    if st.session_state.current_view == 'profile':
+        show_profile()
+    elif st.session_state.current_view == 'subscription':
+        show_subscription_page()
+    else:
+        st.title("Agente Comparador de Contratos - Lawgent")
+        
+        # Verificar límites de suscripción antes de mostrar la interfaz
+        try:
+            db = SessionLocal()
+            user = get_user_by_username(db, st.session_state.username)
+            
+            if not can_make_comparison(user.id, db):
+                st.warning("⚠️ Has alcanzado el límite de comparaciones de tu plan")
+                if st.button("📝 Ver planes de suscripción"):
+                    st.session_state.current_view = 'subscription'
+                    st.rerun()
+                return
+                
+            left_col, right_col = st.columns(2)
 
-    with left_col:
-        pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
-        pdf2 = st.file_uploader("Upload Contract 2", type=['pdf'])
+            with left_col:
+                pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
+                pdf2 = st.file_uploader("Upload Contract 2", type=['pdf'])
 
-        explain_with_llm = not st.checkbox(
-            "Mostrar diferencias técnicas (diff)",
-            value=False,
-            help="Por defecto verás una explicación legal en lenguaje sencillo. Marca para ver el diff técnico."
-        )
+                explain_with_llm = not st.checkbox(
+                    "Mostrar diferencias técnicas (diff)",
+                    value=False,
+                    help="Por defecto verás una explicación legal en lenguaje sencillo. Marca para ver el diff técnico."
+                )
 
-        compare_clicked = st.button("Comparar PDFs")
+                compare_clicked = st.button("Comparar PDFs")
 
-    with right_col:
-        if compare_clicked and pdf1 is not None and pdf2 is not None:
-            st.warning("""
-                ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%. 
-                El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada. 
-                Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
-            """)
+            with right_col:
+                if compare_clicked and pdf1 is not None and pdf2 is not None:
+                    # Actualizar contador de comparaciones
+                    update_comparison_count(user.id, db)
+                    
+                    st.warning("""
+                        ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%. 
+                        El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada. 
+                        Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
+                    """)
 
-            files = {
-                'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
-                'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
-            }
+                    files = {
+                        'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
+                        'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
+                    }
 
-            params = {'explain_with_llm': str(explain_with_llm).lower()}
+                    params = {'explain_with_llm': str(explain_with_llm).lower()}
 
-            try:
-                with st.spinner("Comparando documentos..."):
-                    res = requests.post(f"{base_url}/compare-pdfs-diff", files=files, params=params)
-                    res.raise_for_status()
-                    result = res.json()
+                    try:
+                        with st.spinner("Comparando documentos..."):
+                            res = requests.post(f"{base_url}/compare-pdfs-diff", files=files, params=params)
+                            res.raise_for_status()
+                            result = res.json()
 
-                st.success("¡Comparación completada!")
+                        st.success("¡Comparación completada!")
 
-                if explain_with_llm:
-                    st.subheader("🧾 Explicación de las diferencias:")
-                    st.write(result.get("explanation", "Sin explicación disponible."))
+                        if explain_with_llm:
+                            st.subheader("🧾 Explicación de las diferencias:")
+                            st.write(result.get("explanation", "Sin explicación disponible."))
+                        else:
+                            st.subheader("🔍 Diferencias técnicas (diff):")
+                            diff_lines = result.get("diff_lines", [])
+                            if diff_lines:
+                                st.code("\n".join(diff_lines), language="diff")
+                            else:
+                                st.info("No se encontraron diferencias técnicas.")
+
+                            st.subheader("📊 Cambios detectados:")
+                            st.json(result.get("changes", []))
+
+                        # Mostrar interpretación legal
+                        summary = result.get("summary", {})
+                        if "interpretation" in summary:
+                            st.info(f"🧠 Interpretación: {summary['interpretation']}")
+                        else:
+                            st.warning("No se pudo interpretar el resultado.")
+
+                    except Exception as e:
+                        st.error(f"Error durante la comparación: {str(e)}")
+
                 else:
-                    st.subheader("🔍 Diferencias técnicas (diff):")
-                    diff_lines = result.get("diff_lines", [])
-                    if diff_lines:
-                        st.code("\n".join(diff_lines), language="diff")
-                    else:
-                        st.info("No se encontraron diferencias técnicas.")
+                    st.markdown("""
+                        ### 👋 Bienvenido al Agente Comparador de Contratos - Lawgent
 
-                    st.subheader("📊 Cambios detectados:")
-                    st.json(result.get("changes", []))
+                        #### Instrucciones:
+                        1. Sube dos contratos en formato PDF en la columna izquierda
+                        2. Decide si quieres ver las diferencias técnicas o explicaciones legales
+                        3. Haz clic en "Comparar PDFs" para ver los resultados
 
-                # Mostrar interpretación legal
-                summary = result.get("summary", {})
-                if "interpretation" in summary:
-                    st.info(f"🧠 Interpretación: {summary['interpretation']}")
-                else:
-                    st.warning("No se pudo interpretar el resultado.")
+                        ---
+                        ⚠️ **AVISO**: Este sistema puede tener una precisión menor al 99%. Verifica siempre los resultados antes de usarlos legalmente.
+                    """)
 
-            except Exception as e:
-                st.error(f"Error durante la comparación: {str(e)}")
-
-        else:
-            st.markdown("""
-                ### 👋 Bienvenido al Agente Comparador de Contratos - Lawgent
-
-                #### Instrucciones:
-                1. Sube dos contratos en formato PDF en la columna izquierda
-                2. Decide si quieres ver las diferencias técnicas o explicaciones legales
-                3. Haz clic en "Comparar PDFs" para ver los resultados
-
-                ---
-                ⚠️ **AVISO**: Este sistema puede tener una precisión menor al 99%. Verifica siempre los resultados antes de usarlos legalmente.
-            """)
+        except Exception as e:
+            st.error(f"Error al verificar suscripción: {str(e)}")
+        finally:
+            db.close()
 
 def main():
     if login_page():
