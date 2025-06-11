@@ -1,0 +1,18 @@
+credentials:
+  usernames:
+    admin:
+      name: Admin Legal
+      password: $2b$12$xb4kmXsPSHDGyIvjMj8YZubJ8Y4ZQ9XQOYKCHQG6VG5GHx8AOqX6S
+    demo:
+      name: Usuario Demo
+      password: $2b$12$lvpx9UMKp0QuZj/jPP7jkuXIYh8zIqaOVfYwBFq7OLzZb1UeMz1dK
+
+cookie:
+  name: lawgent_session
+  key: super_secret_key_123
+  expiry_days: 3
+
+preauthorized:
+  emails:
+    - admin@lawgent.com
+    - demo@lawgent.com

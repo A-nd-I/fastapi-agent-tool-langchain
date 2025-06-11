@@ -1,5 +1,7 @@
 import streamlit as st
 import requests
+import hmac
+import hashlib
 
 # Configurar layout amplio
 st.set_page_config(layout="wide")
@@ -17,14 +19,63 @@ st.markdown("""
         .stButton button {
             width: 100%;
         }
+   
     </style>
 """, unsafe_allow_html=True)
 
 # URL de tu backend en Railway
 base_url = "https://fastapi-agent-tool-langchain-production.up.railway.app"
 
-def main():
+# Función para verificar la contraseña de forma segura
+def check_password(password: str) -> bool:
+    # En un entorno real, esto debería estar en una base de datos y la contraseña hasheada
+    USERS = {
+        "admin": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"  # admin
+    }
+    
+    # Hash de la contraseña ingresada
+    hashed_password = hashlib.sha256(password.encode()).hexdigest()
+    return hashed_password == USERS.get(st.session_state.username)
+
+def login_page():
+    st.session_state.setdefault('logged_in', False)
+    
+    if not st.session_state.logged_in:
+        st.markdown("<div class='login-container'>", unsafe_allow_html=True)
+        st.title("🔐 Login")
+        
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        
+        if st.button("Iniciar Sesión"):
+            if username == "admin":  # En un entorno real, verificar contra base de datos
+                st.session_state.username = username
+                if check_password(password):
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta")
+            else:
+                st.error("❌ Usuario no encontrado")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("""
+        ---
+        **Credenciales de prueba:**
+        - Usuario: admin
+        - Contraseña: admin
+        """)
+        return False
+    
+    return True
+
+def main_content():
     st.title("Agente Comparador de Contratos - Lawgent")
+
+    # Agregar botón de logout
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.logged_in = False
+        st.rerun()
 
     left_col, right_col = st.columns(2)
 
@@ -99,6 +150,10 @@ def main():
                 ---
                 ⚠️ **AVISO**: Este sistema puede tener una precisión menor al 99%. Verifica siempre los resultados antes de usarlos legalmente.
             """)
+
+def main():
+    if login_page():
+        main_content()
 
 if __name__ == "__main__":
     main()
