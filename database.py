@@ -9,8 +9,8 @@ import os
 os.makedirs('data', exist_ok=True)
 
 # Si existe la base de datos, eliminarla
-if os.path.exists('data/users.db'):
-    os.remove('data/users.db')
+#if os.path.exists('data/users.db'):
+#    os.remove('data/users.db')
 
 # Configuración de la base de datos
 SQLALCHEMY_DATABASE_URL = "sqlite:///data/users.db"
