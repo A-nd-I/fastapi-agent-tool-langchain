@@ -3,8 +3,8 @@ import requests
 from database import SessionLocal, create_user, get_user_by_username, verify_password, get_user_by_email
 from session_manager import SessionManager
 from stripe_manager import (
-    SUBSCRIPTION_PLANS, 
-    create_checkout_session, 
+    SUBSCRIPTION_PLANS,
+    create_checkout_session,
     get_subscription_status,
     update_comparison_count,
     can_make_comparison
@@ -17,51 +17,52 @@ session_manager = SessionManager()
 # Inicializar el estado de la sesión si no existe
 if 'init' not in st.session_state:
     st.session_state.init = True
-    # Intentar cargar la sesión desde el almacenamiento persistente
-    try:
-        with open('data/current_session.txt', 'r') as f:
-            st.session_state.session_token = f.read().strip()
-    except:
-        st.session_state.session_token = None
+
+# Intentar cargar la sesión desde el almacenamiento persistente
+try:
+    with open('data/current_session.txt', 'r') as f:
+        st.session_state.session_token = f.read().strip()
+except:
+    st.session_state.session_token = None
 
 # Configurar layout amplio
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
 # Estilos CSS personalizados
 st.markdown("""
-    <style>
-        .scrollable-container {
-            height: 85vh;
-            overflow-y: auto;
-            padding-right: 20px;
-            border-left: 1px solid #ddd;
-            margin-top: 1rem;
-        }
-        .stButton button {
-            width: 100%;
-        }
-        .auth-form {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .form-divider {
-            margin: 20px 0;
-            text-align: center;
-        }
-        .sidebar-title {
-            text-align: center;
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 2rem;
-            color: #262730;
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .sidebar-title:hover {
-            color: #0178e4;
-        }
-    </style>
+<style>
+.scrollable-container {
+    height: 85vh;
+    overflow-y: auto;
+    padding-right: 20px;
+    border-left: 1px solid #ddd;
+    margin-top: 1rem;
+}
+.stButton button {
+    width: 100%;
+}
+.auth-form {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.form-divider {
+    margin: 20px 0;
+    text-align: center;
+}
+.sidebar-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 2rem;
+    color: #262730;
+    cursor: pointer;
+    text-decoration: none;
+}
+.sidebar-title:hover {
+    color: #0178e4;
+}
+</style>
 """, unsafe_allow_html=True)
 
 # URL de tu backend
@@ -69,41 +70,33 @@ base_url = "http://localhost:8000"
 
 def show_register_form():
     st.title("📝 Registro de Usuario")
-    
     with st.form("register_form"):
         username = st.text_input("Usuario")
         email = st.text_input("Email")
         password = st.text_input("Contraseña", type="password")
         password_confirm = st.text_input("Confirmar Contraseña", type="password")
-        
         submit_button = st.form_submit_button("Registrarse")
-        
         if submit_button:
             if password != password_confirm:
                 st.error("❌ Las contraseñas no coinciden")
                 return
-            
             if not username or not email or not password:
                 st.error("❌ Todos los campos son obligatorios")
                 return
-            
             try:
                 db = SessionLocal()
                 # Verificar si el usuario ya existe
                 if get_user_by_username(db, username):
                     st.error("❌ El nombre de usuario ya está en uso")
                     return
-                
                 if get_user_by_email(db, email):
                     st.error("❌ El email ya está registrado")
                     return
-                
                 # Crear nuevo usuario
                 create_user(db, username, email, password)
                 st.success("✅ Usuario registrado exitosamente!")
                 st.session_state.show_login = True
                 st.rerun()
-                
             except Exception as e:
                 st.error(f"❌ Error al registrar usuario: {str(e)}")
             finally:
@@ -132,19 +125,15 @@ def login_page():
     if not st.session_state.logged_in:
         if st.session_state.show_login:
             st.title("🔐 Login")
-            
             username = st.text_input("Usuario")
             password = st.text_input("Contraseña", type="password")
-            
             col1, col2 = st.columns(2)
-            
             with col1:
                 if st.button("Iniciar Sesión"):
                     if username and password:
                         try:
                             db = SessionLocal()
                             user = get_user_by_username(db, username)
-                            
                             if user and verify_password(user.hashed_password, password):
                                 # Crear sesión persistente
                                 session_token = session_manager.create_session(username, user.role)
@@ -162,12 +151,10 @@ def login_page():
                             db.close()
                     else:
                         st.error("❌ Por favor ingrese usuario y contraseña")
-            
             with col2:
                 if st.button("Registrarse"):
                     st.session_state.show_login = False
                     st.rerun()
-            
             st.markdown(
                 """
                 <hr>
@@ -186,23 +173,18 @@ def login_page():
             if st.button("¿Ya tienes cuenta? Inicia Sesión"):
                 st.session_state.show_login = True
                 st.rerun()
-        
         return False
-    
     return True
 
 def show_profile():
     """Muestra la página de perfil del usuario"""
     st.title("👤 Perfil de Usuario")
-    
     try:
         db = SessionLocal()
         user = get_user_by_username(db, st.session_state.username)
-        
         if user:
             # Crear dos columnas
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.markdown("### Información Personal")
                 st.write(f"**Usuario:** {user.username}")
@@ -210,11 +192,9 @@ def show_profile():
                 st.write(f"**Rol:** {user.role}")
                 st.write(f"**Cuenta creada:** {user.created_at.strftime('%d/%m/%Y')}")
                 st.write(f"**Estado:** {'Activo' if user.is_active else 'Inactivo'}")
-            
             with col2:
                 st.markdown("### Estadísticas")
                 st.info("📊 Próximamente se agregarán estadísticas de uso")
-                
     except Exception as e:
         st.error(f"Error al cargar el perfil: {str(e)}")
     finally:
@@ -223,7 +203,6 @@ def show_profile():
 def show_subscription_page():
     """Muestra la página de suscripción"""
     st.title("💳 Planes de Suscripción")
-    
     # Obtener estado actual de suscripción
     try:
         db = SessionLocal()
@@ -238,15 +217,12 @@ def show_subscription_page():
             else:
                 st.success(f"✅ Tienes una suscripción activa al {subscription['plan']}")
                 st.write(f"Tu suscripción se renovará el {subscription['current_period_end'].strftime('%d/%m/%Y')}")
-            
-            if not subscription.get('is_free_plan') and st.button("❌ Cancelar Suscripción"):
-                st.warning("Función de cancelación en desarrollo")
-                
+                if not subscription.get('is_free_plan') and st.button("❌ Cancelar Suscripción"):
+                    st.warning("Función de cancelación en desarrollo")
+
         # Mostrar planes disponibles
         st.write("### Planes Disponibles")
-        
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             st.markdown(
                 f"""
@@ -330,19 +306,15 @@ def main_content():
     # Agregar título y botones en la barra lateral
     with st.sidebar:
         st.markdown('<div class="sidebar-title">🤖 LawGent</div>', unsafe_allow_html=True)
-        
         if st.sidebar.button("Inicio"):
             st.session_state.current_view = 'main'
             st.rerun()
-            
         if st.sidebar.button("👤 Mi Perfil"):
             st.session_state.current_view = 'profile'
             st.rerun()
-            
         if st.sidebar.button("💳 Suscripción"):
             st.session_state.current_view = 'subscription'
             st.rerun()
-            
         if st.button("Cerrar Sesión"):
             if 'session_token' in st.session_state:
                 session_manager.delete_session(st.session_state.session_token)
@@ -366,91 +338,94 @@ def main_content():
         try:
             db = SessionLocal()
             user = get_user_by_username(db, st.session_state.username)
-            
             if not can_make_comparison(user.id, db):
                 st.warning("⚠️ Has alcanzado el límite de comparaciones de tu plan")
                 if st.button("📝 Ver planes de suscripción"):
                     st.session_state.current_view = 'subscription'
                     st.rerun()
                 return
-                
+
             left_col, right_col = st.columns(2)
-
-            with left_col:
-                pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
-                pdf2 = st.file_uploader("Upload Contract 2", type=['pdf'])
-
-                explain_with_llm = not st.checkbox(
-                    "Mostrar diferencias técnicas (diff)",
-                    value=False,
-                    help="Por defecto verás una explicación legal en lenguaje sencillo. Marca para ver el diff técnico."
-                )
-
-                compare_clicked = st.button("Comparar PDFs")
-
-            with right_col:
-                if compare_clicked and pdf1 is not None and pdf2 is not None:
-                    # Actualizar contador de comparaciones
-                    update_comparison_count(user.id, db)
-                    
-                    st.warning("""
-                        ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%. 
-                        El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada. 
+            tab1, tab2 = st.tabs(["Comparar PDFs", "Preguntar PDFs"])
+            with tab1:
+                left_col, right_col = st.columns(2)
+                with left_col:
+                    pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
+                    pdf2 = st.file_uploader("Upload Contract 2", type=['pdf'])
+                    explain_with_llm = not st.checkbox(
+                        "Mostrar diferencias técnicas (diff)",
+                        value=False,
+                        help="Por defecto verás una explicación legal en lenguaje sencillo. Marca para ver el diff técnico."
+                    )
+                    compare_clicked = st.button("Comparar PDFs")
+                with right_col:
+                    if compare_clicked and pdf1 is not None and pdf2 is not None:
+                        # Actualizar contador de comparaciones
+                        update_comparison_count(user.id, db)
+                        st.warning("""
+                        ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%.
+                        El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada.
                         Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
-                    """)
-
-                    files = {
-                        'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
-                        'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
-                    }
-
-                    params = {'explain_with_llm': str(explain_with_llm).lower()}
-
-                    try:
-                        with st.spinner("Comparando documentos..."):
-                            res = requests.post(f"{base_url}/compare-pdfs-diff", files=files, params=params)
-                            res.raise_for_status()
-                            result = res.json()
-
-                        st.success("¡Comparación completada!")
-
-                        if explain_with_llm:
-                            st.subheader("🧾 Explicación de las diferencias:")
-                            st.write(result.get("explanation", "Sin explicación disponible."))
-                        else:
-                            st.subheader("🔍 Diferencias técnicas (diff):")
-                            diff_lines = result.get("diff_lines", [])
-                            if diff_lines:
-                                st.code("\n".join(diff_lines), language="diff")
-                            else:
-                                st.info("No se encontraron diferencias técnicas.")
-
-                            st.subheader("📊 Cambios detectados:")
-                            st.json(result.get("changes", []))
-
-                        # Mostrar interpretación legal
-                        summary = result.get("summary", {})
-                        if "interpretation" in summary:
-                            st.info(f"🧠 Interpretación: {summary['interpretation']}")
-                        else:
-                            st.warning("No se pudo interpretar el resultado.")
-
-                    except Exception as e:
-                        st.error(f"Error durante la comparación: {str(e)}")
-
-                else:
-                    st.markdown("""
+                        """)
+                        files = {
+                            'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
+                            'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
+                        }
+                        params = {'explain_with_llm': str(explain_with_llm).lower()}
+                        try:
+                            with st.spinner("Comparando documentos..."):
+                                res = requests.post(f"{base_url}/compare-pdfs-diff", files=files, params=params)
+                                res.raise_for_status()
+                                result = res.json()
+                                st.success("¡Comparación completada!")
+                                if explain_with_llm:
+                                    st.subheader("🧾 Explicación de las diferencias:")
+                                    st.write(result.get("explanation", "Sin explicación disponible."))
+                                else:
+                                    st.subheader("🔍 Diferencias técnicas (diff):")
+                                    diff_lines = result.get("diff_lines", [])
+                                    if diff_lines:
+                                        st.code("\n".join(diff_lines), language="diff")
+                                    else:
+                                        st.info("No se encontraron diferencias técnicas.")
+                                st.subheader("📊 Cambios detectados:")
+                                st.json(result.get("changes", []))
+                                # Mostrar interpretación legal
+                                summary = result.get("summary", {})
+                                if "interpretation" in summary:
+                                    st.info(f"🧠 Interpretación: {summary['interpretation']}")
+                                else:
+                                    st.warning("No se pudo interpretar el resultado.")
+                        except Exception as e:
+                            st.error(f"Error durante la comparación: {str(e)}")
+                    if explain_with_llm:
+                        st.markdown("""
                         ### 👋 Bienvenido al Agente Comparador de Contratos - Lawgent
-
                         #### Instrucciones:
                         1. Sube dos contratos en formato PDF en la columna izquierda
                         2. Decide si quieres ver las diferencias técnicas o explicaciones legales
                         3. Haz clic en "Comparar PDFs" para ver los resultados
-
                         ---
                         ⚠️ **AVISO**: Este sistema puede tener una precisión menor al 99%. Verifica siempre los resultados antes de usarlos legalmente.
-                    """)
+                        """)
 
+            with tab2:
+                st.header("Preguntar sobre múltiples PDFs")
+                uploaded_files = st.file_uploader("Sube tus archivos PDF", accept_multiple_files=True, type=['pdf'])
+                question = st.text_input("Introduce tu pregunta")
+
+                if st.button("Enviar pregunta"):
+                    if uploaded_files and question:
+                        files = [("pdfs", (file.name, file, 'application/pdf')) for file in uploaded_files]
+                        data = {"question": question}
+                        response = requests.post(f"{base_url}/ask-pdfs", files=files, data=data)
+                        if response.status_code == 200:
+                            answer = response.json().get("answer", "No se pudo obtener una respuesta.")
+                            st.success(f"Respuesta: {answer}")
+                        else:
+                            st.error("Hubo un error en la solicitud.")
+                    else:
+                        st.warning("Por favor, sube archivos PDF e introduce una pregunta.")
         except Exception as e:
             st.error(f"Error al verificar suscripción: {str(e)}")
         finally:

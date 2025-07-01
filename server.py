@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, Query
+from fastapi import FastAPI, UploadFile, Query, File, Form
 
 from langchain_community.document_loaders import PyPDFLoader
 
@@ -252,10 +252,31 @@ async def compare_pdfs_diff(
     except Exception as e:
         print(f"Error during comparison: {str(e)}")
         return {"error": True, "message": str(e), "type": "diff_comparison_error"}
-    
-@app.get("/frase-legal")
-async def get_random_legal_phrase():
-    return {"frase": random.choice(frases_abogacia)}
+
+from typing import List
+
+
+@app.post("/ask-pdfs")
+async def ask_pdfs(
+    pdfs: List[UploadFile] = File(...),
+    question: str = Form(...)
+):
+    combined_text = ""
+    for pdf in pdfs:
+        pdf_bytes = await pdf.read()
+        combined_text += pdf_to_text(pdf_bytes) + "\n\n"
+
+    prompt = f"""
+        Eres un asistente legal que responde preguntas sobre documentos. Aquí tienes el contenido combinado de los documentos:
+
+        \"\"\"{combined_text}\"\"\"
+
+        Pregunta: \"{question}\"
+
+        Por favor, proporciona una respuesta clara y concisa basada en los documentos.
+        """
+    answer = llm.invoke(prompt).content
+    return {"answer": answer}
 
 # LLM config (igual)
 llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0, max_tokens=1000)

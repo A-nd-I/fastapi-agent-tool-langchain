@@ -30,7 +30,7 @@ SUBSCRIPTION_PLANS = {
             "Soporte por email",
             "Historial de comparaciones"
         ],
-        "price": "29.99",
+        "price": "9.99",
         "interval": "month",
         "limit": 25
     },
@@ -44,7 +44,7 @@ SUBSCRIPTION_PLANS = {
             "API access",
             "Reportes personalizados"
         ],
-        "price": "99.99",
+        "price": "49.99",
         "interval": "month",
         "limit": float('inf')
     }

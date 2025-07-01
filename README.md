@@ -1,4 +1,8 @@
 
+ 
+### init venv
+ source .venv/bin/activate
+
 ### run back
 uvicorn server:app --reload
 uvicorn main:app --host 0.0.0.0 --port 8000
