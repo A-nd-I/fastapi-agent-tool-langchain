@@ -344,7 +344,7 @@ def main_content():
                 return
 
             # Tabs primero, antes del título
-            tab1, tab2 = st.tabs(["Comparar PDFs", "Preguntar PDFs"])
+            tab1, tab2, tab3 = st.tabs(["Comparar PDFs", "Preguntar PDFs", "Consulta Legal"])
             with tab1:
                 st.title("Agente Comparador de Contratos - Lawgent")
                 left_col, right_col = st.columns(2)
@@ -356,26 +356,36 @@ def main_content():
                         value=False,
                         help="Por defecto verás una explicación legal en lenguaje sencillo. Marca para ver el diff técnico."
                     )
-                    compare_clicked = st.button("Comparar PDFs")
+                    # Estado de procesamiento para comparar PDFs
+                    is_comparing = st.session_state.get('is_comparing_pdfs', False)
+                    compare_clicked = st.button("Comparar PDFs", disabled=is_comparing)
                 with right_col:
-                    if compare_clicked and pdf1 is not None and pdf2 is not None:
-                        # Actualizar contador de comparaciones
-                        update_comparison_count(user.id, db)
-                        st.warning("""
-                        ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%.
-                        El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada.
-                        Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
-                        """)
-                        files = {
-                            'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
-                            'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
-                        }
-                        params = {'explain_with_llm': str(explain_with_llm).lower()}
+                    if compare_clicked and pdf1 is not None and pdf2 is not None and not is_comparing:
                         try:
+                            # Activar estado de procesamiento
+                            st.session_state.is_comparing_pdfs = True
+                            
+                            # Actualizar contador de comparaciones
+                            update_comparison_count(user.id, db)
+                            st.warning("""
+                            ⚠️ **AVISO IMPORTANTE**: Este sistema opera con una precisión predictiva que puede ser inferior al 99%.
+                            El usuario es totalmente responsable de verificar la veracidad y exactitud de toda la información proporcionada.
+                            Los resultados deben ser validados manualmente antes de tomar cualquier decisión legal o contractual.
+                            """)
+                            files = {
+                                'pdf1': ('documento1.pdf', pdf1.getvalue(), 'application/pdf'),
+                                'pdf2': ('documento2.pdf', pdf2.getvalue(), 'application/pdf')
+                            }
+                            params = {'explain_with_llm': str(explain_with_llm).lower()}
+                            
                             with st.spinner("Comparando documentos..."):
                                 res = requests.post(f"{base_url}/compare-pdfs-diff", files=files, params=params)
                                 res.raise_for_status()
                                 result = res.json()
+                                
+                                # Limpiar estado de procesamiento
+                                st.session_state.is_comparing_pdfs = False
+                                
                                 st.success("¡Comparación completada!")
                                 if explain_with_llm:
                                     st.subheader("🧾 Explicación de las diferencias:")
@@ -396,6 +406,7 @@ def main_content():
                                 else:
                                     st.warning("No se pudo interpretar el resultado.")
                         except Exception as e:
+                            st.session_state.is_comparing_pdfs = False
                             st.error(f"Error durante la comparación: {str(e)}")
                     if explain_with_llm:
                         st.markdown("""
@@ -414,18 +425,164 @@ def main_content():
                 uploaded_files = st.file_uploader("Sube tus archivos PDF", accept_multiple_files=True, type=['pdf'])
                 question = st.text_input("Introduce tu pregunta")
 
-                if st.button("Enviar pregunta"):
-                    if uploaded_files and question:
-                        files = [("pdfs", (file.name, file, 'application/pdf')) for file in uploaded_files]
-                        data = {"question": question}
-                        response = requests.post(f"{base_url}/ask-pdfs", files=files, data=data)
-                        if response.status_code == 200:
-                            answer = response.json().get("answer", "No se pudo obtener una respuesta.")
-                            st.success(f"Respuesta: {answer}")
-                        else:
-                            st.error("Hubo un error en la solicitud.")
+                # Estado de procesamiento para preguntar PDFs
+                is_asking = st.session_state.get('is_asking_pdfs', False)
+                if st.button("Enviar pregunta", disabled=is_asking):
+                    if uploaded_files and question and not is_asking:
+                        try:
+                            # Activar estado de procesamiento
+                            st.session_state.is_asking_pdfs = True
+                            
+                            with st.spinner("Procesando documentos y generando respuesta..."):
+                                files = [("pdfs", (file.name, file, 'application/pdf')) for file in uploaded_files]
+                                data = {"question": question}
+                                response = requests.post(f"{base_url}/ask-pdfs", files=files, data=data)
+                                
+                                # Limpiar estado de procesamiento
+                                st.session_state.is_asking_pdfs = False
+                                
+                                if response.status_code == 200:
+                                    answer = response.json().get("answer", "No se pudo obtener una respuesta.")
+                                    st.success(f"Respuesta: {answer}")
+                                else:
+                                    st.error("Hubo un error en la solicitud.")
+                        except Exception as e:
+                            st.session_state.is_asking_pdfs = False
+                            st.error(f"Error durante el procesamiento: {str(e)}")
                     else:
                         st.warning("Por favor, sube archivos PDF e introduce una pregunta.")
+
+            with tab3:
+                st.title("Investigador Jurídico - Lawgent")
+                
+                # Inicializar variables de estado
+                has_response = False
+                is_processing = st.session_state.get('is_processing_legal', False)
+                
+                # Verificar si hay una respuesta en session_state
+                if 'legal_research_result' in st.session_state:
+                    has_response = True
+                
+                # Mostrar formulario: colapsado si hay respuesta, normal si no la hay
+                if has_response:
+                    with st.expander("📝 Nueva consulta jurídica", expanded=False):
+                        st.info("🏛️ **Investigación jurídica especializada** con análisis histórico, filosófico y comparativo")
+                        legal_question = st.text_area(
+                            "Escriba su consulta jurídica:",
+                            height=100,
+                            placeholder="Ej: ¿Qué es el habeas corpus en Colombia? o ¿Cómo funciona el divorcio en España?"
+                        )
+                        # Radio buttons para formato de respuesta
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            format_type = st.radio("Formato de respuesta:", ["📰 Artículo", "📋 Referencias"], horizontal=True)
+                        
+                        research_legal = st.button("🔍 Investigar", type="primary", use_container_width=True, disabled=is_processing)
+                else:
+                    # Interfaz normal cuando no hay respuesta
+                    st.info("🏛️ **Investigación jurídica especializada** con análisis histórico, filosófico y comparativo según el país consultado")
+                    legal_question = st.text_area(
+                        "Escriba su consulta jurídica:",
+                        height=100,
+                        placeholder="Ej: ¿Qué es el habeas corpus en Colombia? o ¿Cómo funciona el divorcio en España?"
+                    )
+                    # Radio buttons para formato de respuesta
+                    format_type = st.radio("Formato de respuesta:", ["📰 Artículo", "📋 Referencias"], horizontal=True)
+                    
+                    research_legal = st.button("🔍 Investigar", type="primary", use_container_width=True, disabled=is_processing)
+                
+                # Mostrar respuesta anterior si existe (prominente)
+                if has_response:
+                    result = st.session_state.legal_research_result
+                    original_question = result.get("question", "")
+                    
+                    # Radio buttons arriba de la respuesta para cambiar formato
+                    st.markdown("### 📊 Investigación Jurídica")
+                    display_format = st.radio("Ver como:", ["📰 Artículo", "📋 Referencias"], 
+                                            horizontal=True, key="display_format")
+                    
+                    # Seleccionar el contenido según formato elegido
+                    if display_format == "📰 Artículo":
+                        research_text = result.get("article_format", result.get("research_result", ""))
+                    else:
+                        research_text = result.get("references_format", result.get("research_result", ""))
+                    
+                    # Mostrar resultado con mejor formato
+                    with st.container():
+                        
+                        # Mostrar el texto en un formato más legible (sin scroll interno)
+                        st.markdown(f"""
+                        <div style="
+                            background-color: #f8f9fa;
+                            padding: 20px;
+                            border-radius: 10px;
+                            border-left: 4px solid #1f77b4;
+                            line-height: 1.6;
+                            font-size: 16px;
+                        ">
+                        {research_text.replace(chr(10), '<br>')}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                        # Fuentes en formato compacto
+                        if "legal_sources" in result and result["legal_sources"]:
+                            st.markdown("**📚 Fuentes consultadas:** " + " • ".join(result["legal_sources"][:3]) + "...")
+                        
+                        # Advertencia académica y legal
+                        st.error("""
+                        ⚠️ **ADVERTENCIA ACADÉMICA Y LEGAL**: 
+                        Esta investigación tiene fines exclusivamente académicos e informativos. 
+                        NO constituye asesoría legal profesional ni debe ser utilizada como base 
+                        única para decisiones jurídicas. Para casos específicos, consulte con 
+                        un abogado especializado y verifique la normatividad vigente.
+                        """)
+                        
+                        # Botón para limpiar y hacer nueva consulta
+                        if st.button("🗑️ Limpiar y nueva consulta"):
+                            del st.session_state.legal_research_result
+                            st.rerun()
+                
+                if research_legal and legal_question.strip() and not is_processing:
+                    try:
+                        # Activar estado de procesamiento
+                        st.session_state.is_processing_legal = True
+                        
+                        with st.spinner("Realizando investigación jurídica integral (generando ambos formatos)..."):
+                            # Datos que se enviarán al backend incluyendo formato
+                            response_format = "article" if format_type == "📰 Artículo" else "references"
+                            research_data = {
+                                "question": legal_question,
+                                "research_type": "comprehensive_legal_research",
+                                "format": response_format
+                            }
+                            
+                            response = requests.post(
+                                f"{base_url}/legal-research", 
+                                json=research_data
+                            )
+                            if response.status_code == 200:
+                                result = response.json()
+                                
+                                # Agregar metadatos al resultado para persistencia
+                                result["question"] = legal_question
+                                result["requested_format"] = response_format
+                                
+                                # Guardar resultado en session_state para persistencia
+                                st.session_state.legal_research_result = result
+                                
+                                # Limpiar estado de procesamiento
+                                st.session_state.is_processing_legal = False
+                                
+                                st.success("✅ Investigación jurídica completada")
+                                st.rerun()  # Recargar para mostrar la interfaz minimizada
+                            else:
+                                st.session_state.is_processing_legal = False
+                                st.error("Error en la investigación jurídica. Intente nuevamente.")
+                    except Exception as e:
+                        st.session_state.is_processing_legal = False
+                        st.error(f"Error durante la investigación: {str(e)}")
+                elif research_legal:
+                    st.warning("Por favor, formule su consulta para investigación jurídica.")
         except Exception as e:
             st.error(f"Error al verificar suscripción: {str(e)}")
         finally:

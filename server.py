@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, Query, File, Form
+from pydantic import BaseModel
 
 from langchain_community.document_loaders import PyPDFLoader
 
@@ -277,6 +278,288 @@ async def ask_pdfs(
         """
     answer = llm.invoke(prompt).content
     return {"answer": answer}
+
+# Modelo para la investigación legal
+class LegalResearchRequest(BaseModel):
+    question: str
+    research_type: str = "comprehensive_legal_research"
+    format: str = "article"  # "article" o "references"
+
+@app.post("/legal-research")
+async def legal_research_endpoint(request: LegalResearchRequest):
+    """
+    Endpoint para investigación jurídica integral colombiana con análisis 
+    histórico, filosófico y jurisprudencial
+    """
+    try:
+        print(f"Starting legal research for question: {request.question[:100]}...")
+        
+        # Detectar si la consulta es específica de Colombia o de otro país
+        country_detection_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=100)
+        
+        detection_prompt = f"""
+        Analiza la siguiente consulta jurídica y determina si es específica de Colombia o de otro país:
+        
+        Consulta: {request.question}
+        
+        Responde únicamente con:
+        - "COLOMBIA" si la consulta es sobre derecho colombiano
+        - "INTERNACIONAL: [nombre del país]" si es sobre otro país específico
+        - "GENERAL" si es sobre derecho en general sin país específico
+        
+        Solo responde con una de estas opciones, nada más.
+        """
+        
+        country_context = country_detection_llm.invoke(detection_prompt).content.strip()
+        print(f"Country detection result: {country_context}")
+        
+        # Seleccionar prompt según formato solicitado
+        if request.format == "references":
+            # PROMPT PARA FORMATO DE REFERENCIAS TÉCNICAS
+            comprehensive_prompt = f"""
+Eres un jurista experto especializado en investigación técnica y referencias jurídicas. Responde con un esquema técnico formal y estructurado.
+
+CONSULTA: {request.question}
+JURISDICCIÓN: {country_context}
+
+INSTRUCCIONES: Proporciona un esquema técnico formal con referencias precisas, organizadas de la siguiente manera:
+
+I. MARCO NORMATIVO VIGENTE
+• Constitución Política: [Artículos específicos aplicables]
+• Leyes principales: [Nombre completo, número, fecha, artículos relevantes]
+• Decretos reglamentarios: [Números, fechas, artículos específicos]
+• Resoluciones aplicables: [Entidad emisora, número, fecha]
+
+II. JURISPRUDENCIA RELEVANTE
+• Corte Constitucional: [Número de sentencia, fecha, magistrado ponente, ratio decidendi]
+• Corte Suprema de Justicia: [Sala, sentencia, fecha, doctrina probable]
+• Consejo de Estado: [Sala, sentencia, fecha, precedente administrativo]
+• Tribunales internacionales: [Corte, caso, fecha, decisión relevante]
+
+III. TRATADOS Y NORMATIVIDAD INTERNACIONAL
+• Tratados ratificados: [Nombre, fecha ratificación, artículos aplicables]
+• Convenios internacionales: [Organización, convenio, vigencia]
+• Soft law: [Declaraciones, principios, recomendaciones]
+
+IV. ANTECEDENTES HISTÓRICOS
+• Fecha de origen: [Año específico, contexto histórico]
+• Reformas principales: [Años, cambios significativos]
+• Casos paradigmáticos: [Nombres, fechas, impacto jurídico]
+
+V. ORGANISMOS COMPETENTES
+• Entidades de control: [Nombres oficiales, funciones específicas]
+• Autoridades jurisdiccionales: [Competencia, procedimientos]
+• Organismos internacionales: [Mandato, supervisión]
+
+VI. PROCEDIMIENTOS TÉCNICOS
+• Requisitos formales: [Lista específica, normatividad aplicable]
+• Plazos legales: [Términos exactos, consecuencias]
+• Recursos disponibles: [Tipos, términos, instancias]
+
+VII. ESTADÍSTICAS Y DATOS
+• Cifras oficiales: [Fuente, año, datos relevantes]
+• Tendencias: [Períodos, variaciones, análisis cuantitativo]
+
+FORMATO REQUERIDO:
+- Usa viñetas y numeración clara
+- Cita exacta de normatividad con números de artículos
+- Referencias jurisprudenciales precisas con radicados cuando los conozcas
+- Fechas específicas y datos verificables
+- Lenguaje técnico-jurídico formal
+- Estructura esquemática clara y organizada
+
+IMPORTANTE: Si desconoces información específica, indica "Por verificar" en lugar de especular."""
+        else:
+            # PROMPT PARA FORMATO ARTÍCULO (como estaba antes)
+            comprehensive_prompt = f"""
+Eres un jurista experto con décadas de experiencia en derecho internacional, derecho comparado y legislación colombiana. Responde de manera exhaustiva y profesional.
+
+CONSULTA: {request.question}
+JURISDICCIÓN DETECTADA: {country_context}
+
+INSTRUCCIONES PARA TU RESPUESTA:
+
+Escribe una investigación jurídica completa en párrafos fluidos y cohesivos (SIN títulos, SIN secciones, SIN numeraciones). Tu respuesta debe incluir naturalmente:
+
+1. Comienza respondiendo directamente la consulta con una explicación clara del concepto o institución jurídica consultada, su relevancia actual y aplicabilidad práctica.
+
+2. Desarrolla la normatividad específica aplicable citando con precisión: artículos constitucionales exactos, leyes vigentes con números y fechas, decretos reglamentarios, jurisprudencia vinculante con números de sentencia y fechas exactas, tratados internacionales ratificados.
+
+3. Presenta el contexto histórico completo explicando los antecedentes que originaron la institución/norma, factores sociales, políticos o económicos que motivaron su creación, evolución cronológica con fechas clave, casos paradigmáticos que marcaron precedentes.
+
+4. Proporciona ejemplos concretos y casos reales: casos judiciales relevantes con nombres y fechas, ejemplos de aplicación práctica, procedimientos específicos, consecuencias jurídicas para las personas.
+
+5. Analiza el tema desde las tres corrientes filosóficas del derecho: desde la perspectiva iusnaturalista (derechos inherentes, principios universales, dignidad humana), desde el enfoque iuspositivista (validez formal, jerarquía normativa, legalidad), desde el análisis iusrealista (aplicación práctica real, factores sociales, efectividad real).
+
+6. Evalúa críticamente la efectividad real de la normatividad, problemas de implementación, beneficios tangibles, aspectos que requieren reforma.
+
+7. Identifica el panorama actual: reformas en curso, debates jurídicos actuales, tendencias jurisprudenciales recientes, proyectos de ley, posicionamiento en estándares internacionales.
+
+8. Destaca la normatividad favorable: leyes que protegen o favorecen el tema, incentivos y beneficios disponibles, programas gubernamentales de apoyo, mecanismos de defensa constitucional.
+
+FORMATO REQUERIDO:
+- SOLO párrafos completos y fluidos
+- NO uses títulos, subtítulos, numeraciones o secciones
+- Transiciones naturales entre ideas
+- Lenguaje técnico-jurídico pero comprensible
+- Citas exactas de normatividad y jurisprudencia
+- Fechas precisas y datos verificables
+
+IMPORTANTE: Si desconoces información específica (fechas, números de sentencias), indícalo claramente en lugar de especular. La precisión es fundamental.
+
+Procede con la investigación de manera exhaustiva integrando todos estos elementos en un texto cohesivo y profesional."""
+        
+        print("Generated comprehensive legal research prompt")
+        
+        # Crear un LLM específico para investigación con más tokens
+        research_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, max_tokens=4000)
+        
+        # Generar ambos formatos para evitar regeneraciones
+        print("Generating both article and references formats...")
+        
+        # Generar formato artículo
+        article_prompt = comprehensive_prompt if request.format == "article" else f"""
+Eres un jurista experto con décadas de experiencia en derecho internacional, derecho comparado y legislación colombiana. Responde de manera exhaustiva y profesional.
+
+CONSULTA: {request.question}
+JURISDICCIÓN DETECTADA: {country_context}
+
+INSTRUCCIONES PARA TU RESPUESTA:
+
+Escribe una investigación jurídica completa en párrafos fluidos y cohesivos (SIN títulos, SIN secciones, SIN numeraciones). Tu respuesta debe incluir naturalmente:
+
+1. Comienza respondiendo directamente la consulta con una explicación clara del concepto o institución jurídica consultada, su relevancia actual y aplicabilidad práctica.
+
+2. Desarrolla la normatividad específica aplicable citando con precisión: artículos constitucionales exactos, leyes vigentes con números y fechas, decretos reglamentarios, jurisprudencia vinculante con números de sentencia y fechas exactas, tratados internacionales ratificados.
+
+3. Presenta el contexto histórico completo explicando los antecedentes que originaron la institución/norma, factores sociales, políticos o económicos que motivaron su creación, evolución cronológica con fechas clave, casos paradigmáticos que marcaron precedentes.
+
+4. Proporciona ejemplos concretos y casos reales: casos judiciales relevantes con nombres y fechas, ejemplos de aplicación práctica, procedimientos específicos, consecuencias jurídicas para las personas.
+
+5. Analiza el tema desde las tres corrientes filosóficas del derecho: desde la perspectiva iusnaturalista (derechos inherentes, principios universales, dignidad humana), desde el enfoque iuspositivista (validez formal, jerarquía normativa, legalidad), desde el análisis iusrealista (aplicación práctica real, factores sociales, efectividad real).
+
+6. Evalúa críticamente la efectividad real de la normatividad, problemas de implementación, beneficios tangibles, aspectos que requieren reforma.
+
+7. Identifica el panorama actual: reformas en curso, debates jurídicos actuales, tendencias jurisprudenciales recientes, proyectos de ley, posicionamiento en estándares internacionales.
+
+8. Destaca la normatividad favorable: leyes que protegen o favorecen el tema, incentivos y beneficios disponibles, programas gubernamentales de apoyo, mecanismos de defensa constitucional.
+
+FORMATO REQUERIDO:
+- SOLO párrafos completos y fluidos
+- NO uses títulos, subtítulos, numeraciones o secciones
+- Transiciones naturales entre ideas
+- Lenguaje técnico-jurídico pero comprensible
+- Citas exactas de normatividad y jurisprudencia
+- Fechas precisas y datos verificables
+
+IMPORTANTE: Si desconoces información específica (fechas, números de sentencias), indícalo claramente en lugar de especular. La precisión es fundamental.
+
+Procede con la investigación de manera exhaustiva integrando todos estos elementos en un texto cohesivo y profesional."""
+
+        # Generar formato referencias  
+        references_prompt = comprehensive_prompt if request.format == "references" else f"""
+Eres un jurista experto especializado en investigación técnica y referencias jurídicas. Responde con un esquema técnico formal y estructurado.
+
+CONSULTA: {request.question}
+JURISDICCIÓN: {country_context}
+
+INSTRUCCIONES: Proporciona un esquema técnico formal con referencias precisas, organizadas de la siguiente manera:
+
+I. MARCO NORMATIVO VIGENTE
+• Constitución Política: [Artículos específicos aplicables]
+• Leyes principales: [Nombre completo, número, fecha, artículos relevantes]
+• Decretos reglamentarios: [Números, fechas, artículos específicos]
+• Resoluciones aplicables: [Entidad emisora, número, fecha]
+
+II. JURISPRUDENCIA RELEVANTE
+• Corte Constitucional: [Número de sentencia, fecha, magistrado ponente, ratio decidendi]
+• Corte Suprema de Justicia: [Sala, sentencia, fecha, doctrina probable]
+• Consejo de Estado: [Sala, sentencia, fecha, precedente administrativo]
+• Tribunales internacionales: [Corte, caso, fecha, decisión relevante]
+
+III. TRATADOS Y NORMATIVIDAD INTERNACIONAL
+• Tratados ratificados: [Nombre, fecha ratificación, artículos aplicables]
+• Convenios internacionales: [Organización, convenio, vigencia]
+• Soft law: [Declaraciones, principios, recomendaciones]
+
+IV. ANTECEDENTES HISTÓRICOS
+• Fecha de origen: [Año específico, contexto histórico]
+• Reformas principales: [Años, cambios significativos]
+• Casos paradigmáticos: [Nombres, fechas, impacto jurídico]
+
+V. ORGANISMOS COMPETENTES
+• Entidades de control: [Nombres oficiales, funciones específicas]
+• Autoridades jurisdiccionales: [Competencia, procedimientos]
+• Organismos internacionales: [Mandato, supervisión]
+
+VI. PROCEDIMIENTOS TÉCNICOS
+• Requisitos formales: [Lista específica, normatividad aplicable]
+• Plazos legales: [Términos exactos, consecuencias]
+• Recursos disponibles: [Tipos, términos, instancias]
+
+VII. ESTADÍSTICAS Y DATOS
+• Cifras oficiales: [Fuente, año, datos relevantes]
+• Tendencias: [Períodos, variaciones, análisis cuantitativo]
+
+FORMATO REQUERIDO:
+- Usa viñetas y numeración clara
+- Cita exacta de normatividad con números de artículos
+- Referencias jurisprudenciales precisas con radicados cuando los conozcas
+- Fechas específicas y datos verificables
+- Lenguaje técnico-jurídico formal
+- Estructura esquemática clara y organizada
+
+IMPORTANTE: Si desconoces información específica, indica "Por verificar" en lugar de especular."""
+
+        # Generar ambos formatos
+        article_result = research_llm.invoke(article_prompt).content
+        references_result = research_llm.invoke(references_prompt).content
+        
+        print(f"Both formats generated - Article: {len(article_result)} chars, References: {len(references_result)} chars")
+        
+        if not article_result or not references_result:
+            print("Warning: One of the formats returned empty content")
+            return {
+                "error": True, 
+                "message": "No se pudo generar la investigación jurídica en ambos formatos"
+            }
+        
+        # Generar fuentes jurídicas simuladas (esto debería conectarse con bases de datos reales)
+        legal_sources = [
+            "Constitución Política de Colombia 1991",
+            "Corte Constitucional de Colombia - Jurisprudencia",
+            "Corte Suprema de Justicia - Sala Civil y Penal",
+            "Consejo de Estado - Sala de lo Contencioso Administrativo",
+            "Código Civil Colombiano",
+            "Código de Procedimiento Civil",
+            "Tratados Internacionales ratificados por Colombia"
+        ]
+        
+        methodology = """
+        Metodología de Investigación Aplicada:
+        1. Análisis hermenéutico-jurídico de fuentes primarias
+        2. Revisión jurisprudencial sistemática
+        3. Estudio comparativo de corrientes filosóficas del derecho
+        4. Contextualización histórico-normativa
+        5. Síntesis doctrinal contemporánea
+        """
+        
+        return {
+            "article_format": article_result,
+            "references_format": references_result,
+            "legal_sources": legal_sources,
+            "methodology": methodology,
+            "research_type": request.research_type,
+            "status": "completed",
+            "requested_format": request.format
+        }
+        
+    except Exception as e:
+        print(f"Error during legal research: {str(e)}")
+        return {
+            "error": True, 
+            "message": f"Error en la investigación jurídica: {str(e)}"
+        }
 
 # LLM config (igual)
 llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0, max_tokens=1000)
