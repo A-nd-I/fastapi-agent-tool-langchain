@@ -332,8 +332,6 @@ def main_content():
     elif st.session_state.current_view == 'subscription':
         show_subscription_page()
     else:
-        st.title("Agente Comparador de Contratos - Lawgent")
-        
         # Verificar límites de suscripción antes de mostrar la interfaz
         try:
             db = SessionLocal()
@@ -345,9 +343,10 @@ def main_content():
                     st.rerun()
                 return
 
-            left_col, right_col = st.columns(2)
+            # Tabs primero, antes del título
             tab1, tab2 = st.tabs(["Comparar PDFs", "Preguntar PDFs"])
             with tab1:
+                st.title("Agente Comparador de Contratos - Lawgent")
                 left_col, right_col = st.columns(2)
                 with left_col:
                     pdf1 = st.file_uploader("Upload Contract 1", type=['pdf'])
@@ -410,6 +409,7 @@ def main_content():
                         """)
 
             with tab2:
+                st.title("Consultor de Documentos - Lawgent")
                 st.header("Preguntar sobre múltiples PDFs")
                 uploaded_files = st.file_uploader("Sube tus archivos PDF", accept_multiple_files=True, type=['pdf'])
                 question = st.text_input("Introduce tu pregunta")
